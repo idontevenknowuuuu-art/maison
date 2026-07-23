@@ -1,33 +1,8 @@
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
 const nodemailer = require('nodemailer');
 
-const PORT = process.env.PORT || 3000;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'kahad238@gmail.com';
 const SMTP_USER = process.env.SMTP_USER || 'idontevenknowuuuu@gmail.com';
 const SMTP_PASS = process.env.SMTP_PASS || 'suhgarwsfqjcioqu';
-
-let transporter = null;
-let emailReady = false;
-
-// ─── Setup Gmail SMTP ────────────
-async function setupEmail() {
-  transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: SMTP_USER, pass: SMTP_PASS }
-  });
-  console.log('  📧 Using Gmail SMTP (' + SMTP_USER + ')');
-  emailReady = true;
-  console.log('  ✅ Email system ready!\n');
-}
-
-const MIME_TYPES = {
-  '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
-  '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-};
 
 // ─── Email HTML Template ───────────────────────────────────────────
 function buildOrderEmailHTML(order, isAdmin) {
@@ -111,109 +86,66 @@ function buildOrderEmailHTML(order, isAdmin) {
   </html>`;
 }
 
-// ─── API Handler ────────────────────────────────────────────────────
-async function handleOrderAPI(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+exports.handler = async function (event, context) {
+  // CORS Headers
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  };
 
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
   }
 
-  let body = '';
-  req.on('data', chunk => body += chunk);
-  req.on('end', async () => {
-    try {
-      const order = JSON.parse(body);
-      
-      if (!order.customer || !order.customer.email) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Customer email required' }));
-        return;
-      }
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers, body: 'Method Not Allowed' };
+  }
 
-      if (!emailReady) {
-        res.writeHead(503, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Email system initializing...' }));
-        return;
-      }
+  try {
+    const order = JSON.parse(event.body);
 
-      // Send to ADMIN
-      await transporter.sendMail({
-        from: `"MAISON Furniture" <${SMTP_USER}>`,
-        to: ADMIN_EMAIL,
-        subject: `🔔 New Order ${order.id} — $${order.total}`,
-        html: buildOrderEmailHTML(order, true)
-      });
-      console.log('📧 Admin email sent to', ADMIN_EMAIL);
-
-      // Send to CUSTOMER
-      await transporter.sendMail({
-        from: `"MAISON Furniture" <${SMTP_USER}>`,
-        to: order.customer.email,
-        subject: `✅ Order Confirmed — ${order.id}`,
-        html: buildOrderEmailHTML(order, false)
-      });
-      console.log('📧 Customer email sent to', order.customer.email);
-
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Emails sent!' }));
-    } catch (err) {
-      console.error('❌ Email error:', err.message);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+    if (!order.customer || !order.customer.email) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ success: false, error: 'Customer email required' })
+      };
     }
-  });
-}
 
-// ─── HTTP Server ────────────────────────────────────────────────────
-const server = http.createServer((req, res) => {
-  // Handle CORS preflight for all routes
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.writeHead(204);
-    res.end();
-    return;
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: SMTP_USER, pass: SMTP_PASS }
+    });
+
+    // Send to ADMIN
+    await transporter.sendMail({
+      from: `"MAISON Furniture" <${SMTP_USER}>`,
+      to: ADMIN_EMAIL,
+      subject: `🔔 New Order ${order.id} — $${order.total}`,
+      html: buildOrderEmailHTML(order, true)
+    });
+
+    // Send to CUSTOMER
+    await transporter.sendMail({
+      from: `"MAISON Furniture" <${SMTP_USER}>`,
+      to: order.customer.email,
+      subject: `✅ Order Confirmed — ${order.id}`,
+      html: buildOrderEmailHTML(order, false)
+    });
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, message: 'Emails sent successfully!' })
+    };
+
+  } catch (error) {
+    console.error('Email error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ success: false, error: error.message })
+    };
   }
-
-  if (req.method === 'POST' && req.url === '/api/order') {
-    return handleOrderAPI(req, res);
-  }
-
-  // Serve static files
-  let filePath = req.url === '/' ? '/furniture.html' : req.url.split('?')[0];
-  filePath = path.join(__dirname, filePath);
-  const ext = path.extname(filePath).toLowerCase();
-  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-  
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('404 Not Found');
-      return;
-    }
-    res.writeHead(200, { 'Content-Type': contentType });
-    res.end(data);
-  });
-});
-
-// ─── Start ──────────────────────────────────────────────────────────
-(async () => {
-  console.log('\n  🏡 MAISON Furniture Server');
-  console.log('  ─────────────────────────');
-  console.log(`  🌐 Port: ${PORT}`);
-  console.log(`  📧 Admin: ${ADMIN_EMAIL}\n`);
-  
-  await setupEmail();
-  
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`  Server running on port ${PORT}`);
-    console.log('  Press Ctrl+C to stop.\n');
-  });
-})();
+};
