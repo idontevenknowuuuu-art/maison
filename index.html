@@ -1097,10 +1097,18 @@ function toggleUserDropdown(){
 }
 
 // CHECKOUT — sends email to admin + customer
+let isPlacingOrder = false;
 async function placeOrder(){
+  if(isPlacingOrder) return; // prevent double-click
   if(!currentUser){openAuth('login'); showToast('⚠️ Please sign in to place an order'); return;}
   const cart=getCart();
   if(!cart.length){showToast('⚠️ Your cart is empty!');return;}
+  
+  // Disable button & show loading
+  isPlacingOrder = true;
+  const btn = document.querySelector('.cart-checkout-btn');
+  const origText = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '⏳ Placing Order...'; btn.style.opacity = '0.6'; }
   
   const sub=cart.reduce((s,i)=>s+i.price*i.qty,0);
   const ship=sub>=500?0:99;
@@ -1123,40 +1131,44 @@ async function placeOrder(){
     }
   };
   
-  // Save to Supabase if available
-  if(supabaseClient) {
-    try {
-      const { error } = await supabaseClient.from('orders').insert([order]);
-      if (error) console.warn('Supabase order save error:', error.message);
-    } catch(e) {
-      console.warn('Could not save to Supabase:', e.message);
-    }
-  }
-  
-  // Send order emails via server
-  try {
-    const res = await fetch('/api/order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(order)
-    });
-    const result = await res.json();
-    if (!result.success) {
-      showToast('⚠️ Order placed but email failed: ' + (result.error || 'Unknown error'));
-    } else {
-      if(result.adminPreview) console.log('Admin Email:', result.adminPreview);
-      if(result.customerPreview) console.log('Customer Email:', result.customerPreview);
-    }
-  } catch(e) {
-    console.warn('Email send error:', e.message);
-  }
-  
+  // Clear cart immediately so user sees instant feedback
   saveCart([]);
   updateCartBadge();
   renderCart();
   closeCart();
+  showToast('✅ Order #' + orderId.slice(-6) + ' placed! Sending confirmation...');
   
-  showToast('✅ Order #' + orderId.slice(-6) + ' placed! Confirmation emails sent.');
+  // Save to Supabase & send emails in background
+  try {
+    const promises = [];
+    
+    if(supabaseClient) {
+      promises.push(
+        supabaseClient.from('orders').insert([order]).then(({error}) => {
+          if(error) console.warn('Supabase order save error:', error.message);
+        }).catch(e => console.warn('Could not save to Supabase:', e.message))
+      );
+    }
+    
+    promises.push(
+      fetch('/api/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(order)
+      }).then(r => r.json()).then(result => {
+        if(!result.success) console.warn('Email failed:', result.error);
+        else showToast('📧 Confirmation emails sent!');
+      }).catch(e => console.warn('Email send error:', e.message))
+    );
+    
+    await Promise.all(promises);
+  } catch(e) {
+    console.warn('Order processing error:', e.message);
+  }
+  
+  // Re-enable button
+  isPlacingOrder = false;
+  if(btn){ btn.disabled = false; btn.innerHTML = origText; btn.style.opacity = '1'; }
 }
 
 // DASHBOARD
