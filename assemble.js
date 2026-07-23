@@ -11,5 +11,5 @@ ${js}
 </html>`;
 
 html = html.split('</body>')[0] + supabaseScript;
-fs.writeFileSync('furniture.html', html);
-console.log('✅ furniture.html rebuilt successfully (' + html.length + ' bytes)');
+fs.writeFileSync('index.html', html);
+console.log('✅ index.html rebuilt successfully (' + html.length + ' bytes)');
