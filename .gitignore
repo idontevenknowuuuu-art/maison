@@ -1,0 +1,31 @@
+node_modules/
+.env
+supabase/.branches/
+supabase/.temp/
+*.log
+
+# Temp/recovery files
+chunk_*.txt
+recovered.txt
+largest_recovered.txt
+missing_js.txt
+original_prompt.txt
+
+# Utility scripts (not needed in production)
+append_js.js
+check_modals.js
+check_string.js
+dump_chunks.js
+extract.js
+extract_missing.js
+fix_html.js
+fix_quotes.js
+inject_keys.js
+recover.js
+recover.py
+recover2.js
+recover_largest.js
+refactor.js
+repair_html.js
+test_page.js
+verify.js

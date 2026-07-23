@@ -1,0 +1,16 @@
+{
+  "name": "maison-furniture",
+  "version": "1.0.0",
+  "description": "MAISON Luxury Furniture Store",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node assemble.js"
+  },
+  "dependencies": {
+    "nodemailer": "^9.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
