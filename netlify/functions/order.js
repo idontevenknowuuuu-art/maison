@@ -118,21 +118,21 @@ exports.handler = async function (event, context) {
       auth: { user: SMTP_USER, pass: SMTP_PASS }
     });
 
-    // Send to ADMIN
-    await transporter.sendMail({
-      from: `"MAISON Furniture" <${SMTP_USER}>`,
-      to: ADMIN_EMAIL,
-      subject: `🔔 New Order ${order.id} — $${order.total}`,
-      html: buildOrderEmailHTML(order, true)
-    });
-
-    // Send to CUSTOMER
-    await transporter.sendMail({
-      from: `"MAISON Furniture" <${SMTP_USER}>`,
-      to: order.customer.email,
-      subject: `✅ Order Confirmed — ${order.id}`,
-      html: buildOrderEmailHTML(order, false)
-    });
+    // Send BOTH emails in parallel (faster!)
+    await Promise.all([
+      transporter.sendMail({
+        from: `"MAISON Furniture" <${SMTP_USER}>`,
+        to: ADMIN_EMAIL,
+        subject: `🔔 New Order ${order.id} — $${order.total}`,
+        html: buildOrderEmailHTML(order, true)
+      }),
+      transporter.sendMail({
+        from: `"MAISON Furniture" <${SMTP_USER}>`,
+        to: order.customer.email,
+        subject: `✅ Order Confirmed — ${order.id}`,
+        html: buildOrderEmailHTML(order, false)
+      })
+    ]);
 
     return {
       statusCode: 200,
